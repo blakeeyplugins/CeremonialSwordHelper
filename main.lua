@@ -1,7 +1,7 @@
--- Set to true to show the numbers box (for checking the maths)
+-- Set to true to enable all debug tools for this plugin.
 local DEBUG = false
 
--- Set to false to turn off the "hit this next button" (Unsure if this violates the rules, so included this to disable it if needed)
+-- Set to false to hide the gold "hit this next" hightlight
 local SHOW_NEXT_SPOT = true
 
 -- Find the layer plugins can draw
@@ -27,7 +27,7 @@ local function getNeeds(spot)
 	return target - current
 end
 
--- Rebuild text in helper window
+-- Rebuild text in debug number box
 local function updateHelper()
 	local topRow = "Top:"
 	local bottomRow = "Bottom:"
@@ -215,7 +215,7 @@ local function updateLetters()
 	end
 end
 
--- Run updateLetters when a sword variable changes
+-- Run updateLetters and updateHelper when a sword variable changes
 local function onSwordChanged(event)
 	local name = tostring(event.var.configName)
 	if string.find(name, "ARTISAN") then
@@ -225,7 +225,8 @@ local function onSwordChanged(event)
 end
 Event.VarTransmit.Subscribe("swordChanged", onSwordChanged)
 
--- Hit logger - Eventually we want to crowdsource accurate hit chances instead of assuming 99.
+-- Hit logger (DEBUG ONLY): Counts how often each hit makes each dent, to measure real hit chances.
+-- Eventually we want to crowdsource accurate hit chances instead of assuming 99.
 -- for now we're just storing locally for testing purposes
 local lastCooldown = nil
 local pendingStrength = nil
@@ -234,7 +235,7 @@ local pendingTotal = nil
 -- SMITH_STRENGTH number to hit letter
 local STRENGTH_LETTER = {[0] = "C", [1] = "S", [2] = "M", [3] = "H"}
 
--- Set to true to log results
+-- Tally of results, e.g. hitLog["85:H4"] = 3. Only loaded/saved in DEBUG (no game info stored for players)
 local hitLog = {}
 if DEBUG then
 	hitLog = PersistentDB:GetStructuredData("hitLog") or {}
@@ -252,6 +253,7 @@ local function totalDepth()
 	return total
 end
 
+-- Count one hit result and save the tally
 local function recordHit(strength, dent)
 	local letter = STRENGTH_LETTER[strength] or "?"
 	local level = Player.GetLevelGameplay(SkillType.SMITHING)
@@ -261,6 +263,7 @@ local function recordHit(strength, dent)
 	print("Logged", key, "- seen", hitLog[key], "times")
 end
 
+-- Every game tick: a cooldown drop means a hit happened
 local function onServerTick()
 	local cooldown = var.VarPlayer.ARTISAN_COUNTDOWN.value
 	local total = totalDepth()
