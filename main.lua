@@ -225,6 +225,64 @@ local function onSwordChanged(event)
 end
 Event.VarTransmit.Subscribe("swordChanged", onSwordChanged)
 
+-- Hit logger - Eventually we want to crowdsource accurate hit chances instead of assuming 99.
+-- for now we're just storing locally for testing purposes
+local lastCooldown = nil
+local pendingStrength = nil
+local pendingTotal = nil
+
+-- SMITH_STRENGTH number to hit letter
+local STRENGTH_LETTER = {[0] = "C", [1] = "S", [2] = "M", [3] = "H"}
+
+-- Set to true to log results
+local hitLog = {}
+if DEBUG then
+	hitLog = PersistentDB:GetStructuredData("hitLog") or {}
+	for key, count in pairs(hitLog) do
+		print("Saved", key, count)
+	end
+end
+
+-- Add up the current depth of all 16 spots
+local function totalDepth()
+	local total = 0
+	for spot = 1, 16 do
+		total = total + var.VarPlayer["ARTISAN_POS_"..spot].value
+	end
+	return total
+end
+
+local function recordHit(strength, dent)
+	local letter = STRENGTH_LETTER[strength] or "?"
+	local level = Player.GetLevelGameplay(SkillType.SMITHING)
+	local key = level .. ":" .. letter .. dent
+	hitLog[key] = (hitLog[key] or 0) + 1
+	PersistentDB:SetStructuredData("hitLog", hitLog)
+	print("Logged", key, "- seen", hitLog[key], "times")
+end
+
+local function onServerTick()
+	local cooldown = var.VarPlayer.ARTISAN_COUNTDOWN.value
+	local total = totalDepth()
+	-- the depth updates a tick after the cooldown, so finish the waiting hit once it moves
+	if pendingStrength ~= nil and total ~= pendingTotal then
+		recordHit(pendingStrength, total - pendingTotal)
+		pendingStrength = nil
+	end
+	if lastCooldown ~= nil and cooldown < lastCooldown then
+		-- A new hit while one is still waiting means that one dented 0
+		if pendingStrength ~= nil then
+			recordHit(pendingStrength, 0)
+		end
+		pendingStrength = var.VarPlayer.SMITH_STRENGTH.value
+		pendingTotal = total
+	end
+	lastCooldown = cooldown
+end
+if DEBUG then
+	Event.ServerLogic.Subscribe("hitLogger", onServerTick)
+end
+
 -- Was the window open last frame?
 local wasOpen = false
 
